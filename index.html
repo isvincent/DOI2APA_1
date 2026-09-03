@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DOI → APA 第七版引用產生器</title>
+<style>
+  :root{
+    --ink:#1a2238;
+    --paper:#fffdf7;
+    --sun:#ffb703;
+    --sun-deep:#fb8500;
+    --sky:#219ebc;
+    --sky-deep:#126782;
+    --mint:#8ecae6;
+    --leaf:#2a9d8f;
+    --rose:#e76f51;
+    --line:#e7e0cf;
+    --shadow:rgba(26,34,56,.12);
+    --r:20px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
+    color:var(--ink);
+    background:var(--paper);
+    font-size:18px;
+    line-height:1.7;
+    min-height:100vh;
+    position:relative;
+    overflow-x:hidden;
+  }
+  /* 背景色塊裝飾 */
+  .blob{position:fixed;border-radius:50%;filter:blur(60px);opacity:.5;z-index:0;pointer-events:none;}
+  .blob.a{width:340px;height:340px;background:var(--mint);top:-120px;right:-80px;}
+  .blob.b{width:300px;height:300px;background:var(--sun);bottom:-120px;left:-100px;opacity:.4;}
+  .blob.c{width:260px;height:260px;background:var(--rose);top:40%;left:-140px;opacity:.28;}
+
+  .wrap{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:clamp(20px,4vw,44px) clamp(16px,4vw,28px) 60px;}
+
+  /* 頁首 */
+  header{text-align:center;margin-bottom:34px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--ink);color:var(--paper);
+    font-size:15px;font-weight:700;letter-spacing:.06em;
+    padding:7px 16px;border-radius:999px;margin-bottom:20px;
+  }
+  .eyebrow .dot{width:9px;height:9px;border-radius:50%;background:var(--sun);
+    box-shadow:0 0 0 4px rgba(255,183,3,.3);}
+  h1{
+    font-size:clamp(30px,7vw,46px);
+    font-weight:900;line-height:1.15;letter-spacing:-.01em;
+  }
+  h1 .flow{color:var(--sky-deep);}
+  h1 .arrow{
+    display:inline-block;margin:0 .12em;color:var(--sun-deep);
+    transform:translateY(2px);
+  }
+  header p{
+    font-size:18px;color:#5a6178;margin-top:14px;max-width:460px;
+    margin-left:auto;margin-right:auto;
+  }
+
+  /* 輸入卡 */
+  .panel{
+    background:#fff;border:2px solid var(--line);
+    border-radius:var(--r);
+    box-shadow:0 18px 40px -22px var(--shadow);
+    padding:clamp(20px,4vw,30px);
+  }
+  label.field-label{
+    display:block;font-size:17px;font-weight:800;margin-bottom:10px;
+    color:var(--ink);
+  }
+  label.field-label .hint{font-weight:500;color:#8b91a5;font-size:15px;margin-left:6px;}
+  .input-row{display:flex;gap:12px;flex-wrap:wrap;}
+  .input-shell{
+    flex:1 1 260px;display:flex;align-items:center;gap:10px;
+    background:var(--paper);border:2px solid var(--line);
+    border-radius:14px;padding:4px 14px;transition:border-color .2s,box-shadow .2s;
+  }
+  .input-shell:focus-within{border-color:var(--sky);box-shadow:0 0 0 4px rgba(33,158,188,.18);}
+  .input-shell .pfx{font-size:16px;font-weight:800;color:var(--sky-deep);white-space:nowrap;}
+  #doi{
+    flex:1;border:none;background:transparent;outline:none;
+    font-size:18px;font-family:inherit;color:var(--ink);padding:12px 0;min-width:0;
+  }
+  #doi::placeholder{color:#b3b9c9;}
+  .btn{
+    border:none;cursor:pointer;font-family:inherit;font-weight:800;
+    font-size:18px;border-radius:14px;padding:14px 26px;
+    transition:transform .12s,box-shadow .2s,background .2s;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn:active{transform:translateY(1px) scale(.99);}
+  .btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px;}
+  .btn-go{
+    flex:0 0 auto;background:var(--sun-deep);color:#fff;
+    box-shadow:0 10px 22px -10px rgba(251,133,0,.8);
+  }
+  .btn-go:hover{background:#e97600;}
+  .btn-go:disabled{background:#d8b98a;cursor:wait;box-shadow:none;}
+
+  /* 範例膠囊 */
+  .samples{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .samples .lead{font-size:15px;color:#8b91a5;font-weight:700;}
+  .chip{
+    border:2px dashed var(--mint);background:#f2fbff;color:var(--sky-deep);
+    font-size:15px;font-weight:700;border-radius:999px;padding:6px 14px;cursor:pointer;
+    font-family:inherit;transition:background .18s,border-color .18s;
+  }
+  .chip:hover{background:#e2f5fc;border-color:var(--sky);}
+
+  /* 狀態訊息 */
+  .status{margin-top:18px;font-size:17px;font-weight:700;border-radius:14px;padding:14px 18px;display:none;align-items:flex-start;gap:10px;}
+  .status.show{display:flex;}
+  .status.load{background:#eef7ff;color:var(--sky-deep);}
+  .status.err{background:#fdeee9;color:#b23a1e;border:1px solid #f4c4b4;}
+  .spinner{width:20px;height:20px;border:3px solid rgba(33,158,188,.3);border-top-color:var(--sky);border-radius:50%;flex:0 0 auto;animation:spin .7s linear infinite;margin-top:2px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* 結果卡 */
+  #result{margin-top:26px;display:none;}
+  #result.show{display:block;animation:rise .4s ease both;}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .cite-card{
+    background:#fff;border-radius:var(--r);overflow:hidden;
+    border:2px solid var(--ink);
+    box-shadow:0 22px 44px -24px var(--shadow);
+  }
+  .cite-top{
+    background:var(--ink);color:var(--paper);
+    padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  }
+  .cite-top .tag{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:16px;font-weight:800;
+  }
+  .cite-top .tag .kind{
+    background:var(--sun);color:var(--ink);font-size:14px;
+    padding:3px 11px;border-radius:999px;font-weight:900;
+  }
+  .cite-body{padding:clamp(20px,4vw,28px);}
+  .cite-text{
+    font-size:19px;line-height:1.85;color:var(--ink);
+    padding-left:2.2em;text-indent:-2.2em;
+    word-break:break-word;
+  }
+  .cite-text .lnk{color:var(--sky-deep);text-decoration:none;border-bottom:2px solid var(--mint);}
+  .cite-text .lnk:hover{border-color:var(--sky);}
+  .cite-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px;}
+  .btn-copy{background:var(--leaf);color:#fff;box-shadow:0 10px 22px -12px rgba(42,157,143,.9);}
+  .btn-copy:hover{background:#25897d;}
+  .btn-copy.done{background:var(--sky-deep);}
+  .btn-ghost{background:var(--paper);color:var(--ink);border:2px solid var(--line);}
+  .btn-ghost:hover{border-color:var(--ink);}
+
+  /* 欄位分解 */
+  .fields{margin-top:24px;border-top:2px dashed var(--line);padding-top:20px;}
+  .fields h3{font-size:16px;font-weight:800;color:#8b91a5;letter-spacing:.04em;margin-bottom:14px;}
+  .field-grid{display:grid;grid-template-columns:1fr;gap:2px;}
+  .frow{display:grid;grid-template-columns:96px 1fr;gap:14px;padding:9px 0;border-bottom:1px solid var(--line);font-size:17px;}
+  .frow:last-child{border-bottom:none;}
+  .frow .k{font-weight:800;color:var(--sky-deep);}
+  .frow .v{color:var(--ink);word-break:break-word;}
+
+  footer{text-align:center;margin-top:38px;font-size:15px;color:#9aa0b2;line-height:1.7;}
+  footer b{color:#6f7488;}
+
+  @media(max-width:520px){
+    body{font-size:17px;}
+    .btn-go{flex:1 1 100%;}
+    .frow{grid-template-columns:82px 1fr;gap:10px;}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important;}
+  }
+</style>
+</head>
+<body>
+<div class="blob a"></div><div class="blob b"></div><div class="blob c"></div>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow"><span class="dot"></span>文獻引用小幫手</span>
+    <h1>把 <span class="flow">DOI</span><span class="arrow">➜</span>變成 <span class="flow">APA 第七版</span></h1>
+    <p>貼上一組 DOI 代碼，立刻拿到可以直接放進參考文獻的引用格式。</p>
+  </header>
+
+  <div class="panel">
+    <label class="field-label" for="doi">輸入 DOI 代碼<span class="hint">數位物件識別碼</span></label>
+    <div class="input-row">
+      <div class="input-shell">
+        <span class="pfx">DOI</span>
+        <input id="doi" type="text" inputmode="text" autocomplete="off" spellcheck="false"
+               placeholder="10.1038/nature14539"
+               aria-label="輸入 DOI 代碼">
+      </div>
+      <button class="btn btn-go" id="go">查詢引用</button>
+    </div>
+
+    <div class="samples">
+      <span class="lead">試試看：</span>
+      <button class="chip" data-doi="10.1038/nature14539">深度學習（期刊）</button>
+      <button class="chip" data-doi="10.1145/3313831.3376234">CHI 會議論文</button>
+      <button class="chip" data-doi="10.1037/0003-066X.59.1.29">心理學（單一作者）</button>
+    </div>
+
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </div>
+
+  <div id="result">
+    <div class="cite-card">
+      <div class="cite-top">
+        <span class="tag">APA 7<sup>th</sup> 參考文獻<span class="kind" id="kind">期刊文章</span></span>
+      </div>
+      <div class="cite-body">
+        <p class="cite-text" id="citation"></p>
+
+        <div class="cite-actions">
+          <button class="btn btn-copy" id="copy">複製引用格式</button>
+          <button class="btn btn-ghost" id="open">開啟原文</button>
+        </div>
+
+        <div class="fields">
+          <h3>拆解後的欄位</h3>
+          <div class="field-grid" id="fields"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    資料來源：<b>Crossref</b> 公開學術資料庫 · 依 <b>APA 第 7 版</b> 期刊、書籍章節與會議論文規則排版<br>
+    自動產生的格式仍建議對照原文校對後再使用。
+  </footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const doiInput = $('#doi'), goBtn = $('#go'), statusEl = $('#status');
+const resultEl = $('#result'), citeEl = $('#citation'), fieldsEl = $('#fields');
+const copyBtn = $('#copy'), openBtn = $('#open'), kindEl = $('#kind');
+
+let currentUrl = '', currentPlain = '';
+
+// 中文文獻類型標籤
+const KIND_LABEL = {
+  'journal-article':'期刊文章',
+  'proceedings-article':'會議論文',
+  'book-chapter':'書籍章節',
+  'book':'書籍',
+  'book-section':'書籍章節',
+  'monograph':'專書',
+  'reference-book':'工具書',
+  'posted-content':'預印本',
+  'dissertation':'學位論文',
+  'report':'研究報告',
+  'dataset':'資料集',
+  'other':'其他資料'
+};
+
+// 清理 DOI 輸入（可貼整段網址）
+function cleanDoi(raw){
+  let s = raw.trim();
+  s = s.replace(/^https?:\/\/(dx\.)?doi\.org\//i,'');
+  s = s.replace(/^doi:\s*/i,'');
+  return s.trim();
+}
+
+// APA 句首式大寫（sentence case）：僅句首、冒號/問號/驚嘆號後首字大寫，其餘轉小寫，
+// 但保留全大寫縮寫詞（如 CHI、AI、DNA）與含大寫的專有名詞（如 iPhone、MagTouch）。
+function toSentenceCase(t){
+  if(!t) return '';
+  t = t.replace(/\s+/g,' ').trim().replace(/\.\s*$/,'');
+  const words = t.split(' ');
+  let capNext = true; // 下一個詞是否為句首
+  const out = words.map(w => {
+    if(!w) return w;
+    // 保留縮寫（2+ 連續大寫）或本身即含內部大寫的專有名詞
+    const looksProper = /[A-Z].*[A-Z]/.test(w) || /^[A-Z]{2,}/.test(w) || /[a-z][A-Z]/.test(w);
+    const stripped = w.replace(/[^A-Za-z]/g,'');
+    const isRoman = /^(?:M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3}))$/i.test(stripped) && stripped.length>0 && /[IVXLCDM]/i.test(stripped) && stripped.toUpperCase()===stripped;
+
+    let res;
+    if(looksProper || isRoman){
+      res = w; // 原樣保留
+    } else if(capNext){
+      res = w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    } else {
+      res = w.toLowerCase();
+    }
+    // 判斷此詞尾是否觸發下一詞為句首（冒號、問號、驚嘆號、破折號後）
+    capNext = /[:?!]$|—$|–$/.test(w);
+    return res;
+  });
+  return out.join(' ');
+}
+
+// 作者：Family, A. B. 形式
+function formatOneAuthor(a){
+  if(a.family){
+    let initials = '';
+    if(a.given){
+      // 取每個名字段落首字母
+      initials = a.given.split(/[\s\-]+/).filter(Boolean)
+        .map(p => p[0].toUpperCase()+'.').join(' ');
+    }
+    return initials ? `${a.family}, ${initials}` : a.family;
+  }
+  return a.name || '';
+}
+
+// 組合作者字串（APA 7：最多 20 位，第 20 後用 …）
+function formatAuthors(list){
+  if(!list || !list.length) return '';
+  const names = list.map(formatOneAuthor).filter(Boolean);
+  if(names.length === 1) return names[0];
+  if(names.length <= 20){
+    return names.slice(0,-1).join(', ') + ', & ' + names[names.length-1];
+  }
+  return names.slice(0,19).join(', ') + ', … ' + names[names.length-1];
+}
+
+function getYear(m){
+  const d = m.issued || m['published-print'] || m['published-online'] || m.published || m.created;
+  if(d && d['date-parts'] && d['date-parts'][0] && d['date-parts'][0][0]) return d['date-parts'][0][0];
+  return 'n.d.';
+}
+
+function joinPages(p){
+  if(!p) return '';
+  return p.replace(/-/g,'\u2013'); // en dash
+}
+
+// 依類型組出 APA 引用（回傳 {html, plain}）
+function buildApa(m){
+  const authors = formatAuthors(m.author);
+  const year = getYear(m);
+  const rawTitle = Array.isArray(m.title)? m.title[0] : m.title;
+  const title = toSentenceCase(rawTitle || '(未提供標題)');
+  const container = Array.isArray(m['container-title'])? m['container-title'][0] : m['container-title'];
+  const vol = m.volume, issue = m.issue, pages = joinPages(m.page);
+  const publisher = m.publisher;
+  const type = m.type || 'other';
+  const doiUrl = 'https://doi.org/' + (m.DOI || cleanDoi(doiInput.value));
+
+  // 作者段（結尾句點；若作者以縮寫句點結尾則不重覆）
+  const authPart = authors ? (/[.\u2026]$/.test(authors)? authors+' ' : authors + '. ') : '';
+  const yearPart = `(${year}). `;
+
+  let html='', plain='';
+
+  const link = `<a class="lnk" href="${doiUrl}" target="_blank" rel="noopener">${doiUrl}</a>`;
+
+  if(type === 'journal-article'){
+    // 作者. (年). 標題. 期刊名, 卷(期), 頁碼. DOI
+    let vp = '';
+    if(vol) vp += `<i>${vol}</i>`;
+    if(issue) vp += `(${issue})`;
+    let jr = container ? `<i>${container}</i>` : '';
+    if(vp) jr += (jr?', ':'') + vp;
+    if(pages) jr += (jr?', ':'') + pages;
+    html = `${authPart}${yearPart}${title}. ${jr}. ${link}`;
+    plain = `${stripAuth(authors)} ${yearPart}${title}. ${container||''}${vol?', '+vol:''}${issue?'('+issue+')':''}${pages?', '+pages:''}. ${doiUrl}`;
+  }
+  else if(type === 'proceedings-article'){
+    // 作者. (年). 標題. In 論文集名 (pp. 頁碼). 出版者. DOI
+    let inPart = container ? `In <i>${container}</i>` : '';
+    if(pages) inPart += ` (pp. ${pages})`;
+    let pub = publisher ? `. ${publisher}` : '';
+    html = `${authPart}${yearPart}${title}. ${inPart}${pub}. ${link}`;
+    plain = `${stripAuth(authors)} ${yearPart}${title}. In ${container||''}${pages?' (pp. '+pages+')':''}${publisher?'. '+publisher:''}. ${doiUrl}`;
+  }
+  else if(type === 'book-chapter' || type === 'book-section'){
+    // 作者. (年). 章名. In 編者 (Ed.), 書名 (pp. 頁碼). 出版者. DOI
+    let editors = '';
+    if(m.editor && m.editor.length){
+      const eNames = m.editor.map(e => {
+        let ini = e.given? e.given.split(/[\s\-]+/).filter(Boolean).map(p=>p[0].toUpperCase()+'.').join(' '):'';
+        return (ini?ini+' ':'') + (e.family||e.name||'');
+      });
+      let ed = eNames.length>1 ? eNames.slice(0,-1).join(', ')+', & '+eNames.slice(-1) : eNames[0];
+      editors = `In ${ed} (${m.editor.length>1?'Eds.':'Ed.'}), `;
+    } else if(container){
+      editors = 'In ';
+    }
+    let bookName = container ? `<i>${container}</i>` : '';
+    if(pages) bookName += ` (pp. ${pages})`;
+    let pub = publisher ? `. ${publisher}` : '';
+    html = `${authPart}${yearPart}${title}. ${editors}${bookName}${pub}. ${link}`;
+    plain = `${stripAuth(authors)} ${yearPart}${title}. ${editors.replace(/<[^>]+>/g,'')}${container||''}${pages?' (pp. '+pages+')':''}${publisher?'. '+publisher:''}. ${doiUrl}`;
+  }
+  else if(type === 'book' || type === 'monograph' || type === 'reference-book'){
+    // 作者. (年). 書名. 出版者. DOI
+    let pub = publisher ? `${publisher}` : '';
+    html = `${authPart}${yearPart}<i>${title}</i>. ${pub}${pub?'. ':''}${link}`;
+    plain = `${stripAuth(authors)} ${yearPart}${title}. ${publisher?publisher+'. ':''}${doiUrl}`;
+  }
+  else {
+    // 泛用：作者. (年). 標題. 出版者/來源. DOI
+    let src = container || publisher || '';
+    html = `${authPart}${yearPart}<i>${title}</i>. ${src?src+'. ':''}${link}`;
+    plain = `${stripAuth(authors)} ${yearPart}${title}. ${src?src+'. ':''}${doiUrl}`;
+  }
+
+  return {html, plain, doiUrl, type};
+}
+
+// 純文字版作者段，避免出現 HTML
+function stripAuth(authors){
+  if(!authors) return '';
+  return /[.\u2026]$/.test(authors)? authors : authors+'.';
+}
+
+function showStatus(kind, msg){
+  statusEl.className = 'status show ' + kind;
+  statusEl.innerHTML = kind==='load'
+    ? `<span class="spinner"></span><span>${msg}</span>`
+    : `<span>⚠️</span><span>${msg}</span>`;
+}
+function hideStatus(){ statusEl.className='status'; statusEl.innerHTML=''; }
+
+function renderFields(m){
+  const rows = [];
+  const auth = formatAuthors(m.author);
+  if(auth) rows.push(['作者', auth]);
+  rows.push(['年份', getYear(m)]);
+  const t = Array.isArray(m.title)? m.title[0]:m.title;
+  if(t) rows.push(['標題', t]);
+  const c = Array.isArray(m['container-title'])? m['container-title'][0]:m['container-title'];
+  if(c) rows.push(['來源', c]);
+  if(m.volume) rows.push(['卷', m.volume]);
+  if(m.issue) rows.push(['期', m.issue]);
+  if(m.page) rows.push(['頁碼', joinPages(m.page)]);
+  if(m.publisher) rows.push(['出版者', m.publisher]);
+  fieldsEl.innerHTML = rows.map(([k,v])=>
+    `<div class="frow"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+}
+
+async function lookup(){
+  const doi = cleanDoi(doiInput.value);
+  if(!doi){ showStatus('err','請先輸入 DOI 代碼，例如 10.1038/nature14539。'); doiInput.focus(); return; }
+  if(!/^10\.\d{4,9}\//.test(doi)){
+    showStatus('err','這看起來不像有效的 DOI。DOI 通常以「10.」開頭，例如 10.1038/nature14539。');
+    return;
+  }
+
+  resultEl.classList.remove('show');
+  goBtn.disabled = true;
+  showStatus('load','正在向 Crossref 資料庫查詢文獻資料…');
+
+  try{
+    const res = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`);
+    if(res.status === 404) throw new Error('找不到這組 DOI。請確認代碼是否正確，或該文獻是否已登錄於 Crossref。');
+    if(!res.ok) throw new Error(`查詢失敗（伺服器回應 ${res.status}）。請稍後再試一次。`);
+    const data = await res.json();
+    const m = data.message;
+
+    const apa = buildApa(m);
+    citeEl.innerHTML = apa.html;
+    currentPlain = apa.plain.replace(/\s+/g,' ').trim();
+    currentUrl = apa.doiUrl;
+    kindEl.textContent = KIND_LABEL[apa.type] || KIND_LABEL['other'];
+    renderFields(m);
+
+    hideStatus();
+    resultEl.classList.add('show');
+    copyBtn.textContent = '複製引用格式';
+    copyBtn.classList.remove('done');
+    resultEl.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }catch(err){
+    let msg = err.message;
+    if(err.name === 'TypeError') msg = '無法連線到 Crossref。請檢查網路連線後再試一次。';
+    showStatus('err', msg);
+  }finally{
+    goBtn.disabled = false;
+  }
+}
+
+async function copyCite(){
+  try{
+    await navigator.clipboard.writeText(currentPlain);
+  }catch(e){
+    const ta=document.createElement('textarea');
+    ta.value=currentPlain;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');ta.remove();
+  }
+  copyBtn.textContent = '已複製！';
+  copyBtn.classList.add('done');
+  setTimeout(()=>{copyBtn.textContent='複製引用格式';copyBtn.classList.remove('done');},1900);
+}
+
+// 事件
+goBtn.addEventListener('click', lookup);
+doiInput.addEventListener('keydown', e=>{ if(e.key==='Enter') lookup(); });
+copyBtn.addEventListener('click', copyCite);
+openBtn.addEventListener('click', ()=>{ if(currentUrl) window.open(currentUrl,'_blank','noopener'); });
+document.querySelectorAll('.chip').forEach(c=>{
+  c.addEventListener('click', ()=>{ doiInput.value=c.dataset.doi; lookup(); });
+});
+</script>
+</body>
+</html>
